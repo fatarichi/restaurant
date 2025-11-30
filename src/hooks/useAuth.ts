@@ -1,64 +1,40 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { authService } from "@/services/api/auth.service";
-import type { LoginBody, RegisterBody, UpdateProfileBody } from "@/types/auth";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+
+const API_URL = import.meta.env.VITE_API_URL;
 
 export function useAuth() {
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  /** GET TOKEN FROM LOCAL STORAGE */
-  const token = localStorage.getItem("token");
-
-  /** GET PROFILE IF LOGGED IN */
-  const profileQuery = useQuery({
-    queryKey: ["auth", "profile"],
-    queryFn: () => authService.getProfile(token!),
-    enabled: !!token, // only run if token exists
-    retry: false,
-  });
-
-  /** REGISTER USER */
-  const registerMutation = useMutation({
-    mutationFn: (payload: RegisterBody) => authService.register(payload),
-    onSuccess: (res) => {
-      if (res.success && res.data?.token) {
-        localStorage.setItem("token", res.data.token);
-        queryClient.invalidateQueries({ queryKey: ["auth", "profile"] });
-      }
-    }
-  });
-
-  /** LOGIN USER */
   const loginMutation = useMutation({
-    mutationFn: (payload: LoginBody) => authService.login(payload),
+    mutationFn: async (data: { email: string; password: string }) => {
+      const res = await axios.post(`${API_URL}/auth/login`, data);
+      return res.data;
+    },
     onSuccess: (res) => {
-      if (res.success && res.data?.token) {
-        localStorage.setItem("token", res.data.token);
-        queryClient.invalidateQueries({ queryKey: ["auth", "profile"] });
-      }
-    }
-  });
-
-  /** UPDATE PROFILE */
-  const updateProfileMutation = useMutation({
-    mutationFn: (payload: UpdateProfileBody) => authService.updateProfile(token!, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["auth", "profile"] });
+      localStorage.setItem("token", res.token);
+      toast.success("Login berhasil 🎉");
+      navigate("/dashboard");
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || "Login gagal");
     },
   });
 
-  /** LOGOUT USER */
-  const logout = () => {
-    localStorage.removeItem("token");
-    queryClient.removeQueries({ queryKey: ["auth"] });
-  };
+  const registerMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await axios.post(`${API_URL}/auth/register`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success("Akun berhasil dibuat! 🎉 Silahkan login.");
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || "Pendaftaran gagal");
+    },
+  });
 
-  return {
-    token,
-    profileQuery,
-    registerMutation,
-    loginMutation,
-    updateProfileMutation,
-    logout,
-    isAuthenticated: !!token,
-  };
+  return { loginMutation, registerMutation };
 }
